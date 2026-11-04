@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote AI Agent Workflow</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 1rem; }
+.container { max-width: 1200px; margin: 0 auto; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #334155; }
+h1 { font-size: 1.5rem; color: #38bdf8; }
+.status { display: flex; gap: 1rem; align-items: center; font-size: 0.875rem; }
+.pill { padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.pill.online { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+.pill.offline { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1rem; }
+.card h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.75rem; }
+.token-card { display: flex; gap: 0.5rem; align-items: center; }
+.token-input { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.5rem; color: #e2e8f0; font-family: monospace; font-size: 0.875rem; }
+.btn { background: #38bdf8; color: #000; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+.btn:hover { background: #7dd3fc; }
+.btn.secondary { background: #334155; color: #e2e8f0; }
+.btn.secondary:hover { background: #475569; }
+.btn.danger { background: #ef4444; color: #fff; }
+.btn.danger:hover { background: #dc2626; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.875rem; resize: vertical; min-height: 120px; }
+.output { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #334155; }
+th { color: #94a3b8; }
+tr:hover { background: rgba(255,255,255,0.02); }
+.tunnel-url { font-family: monospace; color: #38bdf8; word-break: break-all; }
+.empty { color: #64748b; font-size: 0.875rem; font-style: italic; }
+.alert { padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem; }
+.alert.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #f87171; }
+.alert.success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); color: #4ade80; }
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1>Remote AI Agent Workflow</h1>
+<div class="status">
+<span class="pill online" id="statusPill">● Online</span>
+<span id="tunnelUrl" class="tunnel-url"></span>
+</div>
+</header>
+
+<div id="alertArea"></div>
+
+<div class="grid">
+<div class="card">
+<h2>Authentication</h2>
+<div class="token-card">
+<input type="text" id="tokenInput" class="token-input" placeholder="No token — click Get Token" readonly>
+<button class="btn" onclick="getToken()">Get Token</button>
+</div>
+<p style="margin-top:0.5rem; font-size:0.8rem; color:#94a3b8;">Use the token as a Bearer header in API calls, or paste it below for the UI.</p>
+<input type="text" id="uiToken" class="token-input" placeholder="Paste token for UI commands">
+</div>
+
+<div class="card">
+<h2>Tunnel</h2>
+<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+<button class="btn" onclick="startTunnel()">Start Tunnel</button>
+<button class="btn secondary" onclick="stopTunnel()">Stop Tunnel</button>
+<button class="btn secondary" onclick="refreshTunnel()">Refresh</button>
+</div>
+<p id="tunnelInfo" style="margin-top:0.5rem; font-size:0.8rem; color:#94a3b8;"></p>
+</div>
+</div>
+
+<div class="grid">
+<div class="card" style="grid-column: span 2;">
+<h2>Command Execution</h2>
+<textarea id="cmdInput" placeholder="e.g. ls -la, pwd, whoami, curl ..."></textarea>
+<div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+<button class="btn" onclick="runCommand()">Run Command</button>
+<button class="btn secondary" onclick="clearOutput()">Clear</button>
+</div>
+<div id="cmdOutput" class="output"></div>
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h2>AI Chat</h2>
+<textarea id="chatInput" placeholder="Ask the agent to explain, write code, or analyze..."></textarea>
+<div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+<label style="font-size:0.8rem; color:#94a3b8;">Provider:</label>
+<select id="llmProvider" style="background:#0f172a; border:1px solid #334155; color:#e2e8f0; border-radius:0.4rem; padding:0.3rem; font-size:0.8rem;">
+<option value="ollama">Ollama</option>
+<option value="openai">OpenAI</option>
+<option value="openrouter">OpenRouter</option>
+</select>
+<button class="btn" onclick="chatLLM()">Ask</button>
+</div>
+<div id="chatOutput" class="output" style="margin-top:0.5rem;"></div>
+</div>
+
+<div class="card">
+<h2>Command History</h2>
+<div id="historyList" style="max-height:300px; overflow-y:auto; border:1px solid #334155; border-radius:0.5rem; background:#0f172a; padding:0.5rem;"></div>
+<button class="btn secondary" style="margin-top:0.5rem; width:100%;" onclick="loadHistory()">Refresh History</button>
+</div>
+</div>
+
+<script>
+let token = localStorage.getItem("aia_token") || "";
+document.getElementById("uiToken").value = token;
+
+function showAlert(msg, type="error") {
+  const area = document.getElementById("alertArea");
+  area.innerHTML = `<div class="alert ${type}">${escapeHtml(msg)}</div>`;
+  setTimeout(() => { area.innerHTML = ""; }, 5000);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&#39;","'":"&#39;" })[c]);
+}
+
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...opts.headers };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const res = await fetch("http://localhost:8080" + path, { ...opts, headers });
+  if (res.status === 401) { showAlert("Session expired. Get a new token."); token = ""; localStorage.removeItem("aia_token"); document.getElementById("uiToken").value = ""; }
+  return res;
+}
+
+async function getToken() {
+  const res = await api("/auth/token", { method: "POST" });
+  const data = await res.json();
+  if (data.access_token) {
+    token = data.access_token;
+    localStorage.setItem("aia_token", token);
+    document.getElementById("uiToken").value = token;
+    document.getElementById("tokenInput").value = token;
+    showAlert("Token obtained.", "success");
+  } else {
+    showAlert("Failed to get token.");
+  }
+}
+
+async function refreshTunnel() {
+  const res = await api("/tunnel/status");
+  const data = await res.json();
+  const info = document.getElementById("tunnelInfo");
+  const urlEl = document.getElementById("tunnelUrl");
+  if (data.active) {
+    info.textContent = "Tunnel active — " + data.public_url;
+    urlEl.textContent = data.public_url;
+    showAlert("Tunnel: " + data.public_url, "success");
+  } else {
+    info.textContent = "Tunnel inactive.";
+    urlEl.textContent = "";
+  }
+}
+
+async function startTunnel() {
+  const res = await api("/tunnel/start", { method: "POST" });
+  if (res.ok) {
+    const data = await res.json();
+    showAlert("Tunnel started: " + data.public_url, "success");
+    refreshTunnel();
+  } else {
+    showAlert("Failed to start tunnel.");
+  }
+}
+
+async function stopTunnel() {
+  const res = await api("/tunnel/stop", { method: "POST" });
+  if (res.ok) {
+    showAlert("Tunnel stopped.", "success");
+    refreshTunnel();
+  } else {
+    showAlert("Failed to stop tunnel.");
+  }
+}
+
+async function runCommand() {
+  const input = document.getElementById("cmdInput");
+  const out = document.getElementById("cmdOutput");
+  const cmd = input.value.trim();
+  if (!cmd) return;
+  out.textContent = "running…";
+  const uiTok = document.getElementById("uiToken").value || token;
+  const res = await fetch("http://localhost:8080/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + uiTok },
+    body: JSON.stringify({ command: cmd }),
+  });
+  const data = await res.json();
+  if (data.error) out.textContent = "ERROR: " + data.error;
+  else if (data.output !== undefined && data.output !== null) out.textContent = data.output;
+  else out.textContent = JSON.stringify(data, null, 2);
+  loadHistory();
+}
+
+async function chatLLM() {
+  const input = document.getElementById("chatInput");
+  const out = document.getElementById("chatOutput");
+  const prompt = input.value.trim();
+  if (!prompt) return;
+  out.textContent = "thinking…";
+  const uiTok = document.getElementById("uiToken").value || token;
+  const provider = document.getElementById("llmProvider").value;
+  const res = await fetch("http://localhost:8080/llm/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + uiTok },
+    body: JSON.stringify({ prompt, provider }),
+  });
+  const data = await res.json();
+  out.textContent = data.response || JSON.stringify(data, null, 2);
+}
+
+async function loadHistory() {
+  const uiTok = document.getElementById("uiToken").value || token;
+  const res = await fetch("http://localhost:8080/history?limit=20", {
+    headers: { "Authorization": "Bearer " + uiTok },
+  });
+  if (!res.ok) { document.getElementById("historyList").innerHTML = "<div class='empty'>Unable to load history.</div>"; return; }
+  const rows = await res.json();
+  const el = document.getElementById("historyList");
+  if (!rows.length) { el.innerHTML = "<div class='empty'>No commands yet.</div>"; return; }
+  el.innerHTML = rows.map(r => `
+    <div style="border-bottom:1px solid #334155; padding:0.5rem;">
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#94a3b8;">
+        <span>${new Date(r.created_at * 1000).toLocaleString()}</span>
+        <span style="text-transform:uppercase; font-size:0.7rem;">${r.status}</span>
+      </div>
+      <div style="font-family:monospace; font-size:0.8rem; margin-top:0.25rem;">${escapeHtml(r.command)}</div>
+      ${r.output ? `<div style="margin-top:0.25rem; font-size:0.8rem;">${escapeHtml(r.output).slice(0,300)}</div>` : ""}
+      ${r.error ? `<div style="color:#f87171; font-size:0.8rem; margin-top:0.25rem;">${escapeHtml(r.error)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function clearOutput() { document.getElementById("cmdOutput").textContent = ""; }
+
+// Enter to send in chat
+document.getElementById("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatLLM(); } });
+// Enter to run command
+document.getElementById("cmdInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runCommand(); } });
+
+refreshTunnel();
+loadHistory();
+</script>
+</body>
+</html>
