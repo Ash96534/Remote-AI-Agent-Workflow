@@ -1,0 +1,33 @@
+# docker-compose.yml — Remote AI Agent Workflow
+version: "3.8"
+
+services:
+  aia-workflow:
+    build: .
+    container_name: aia-workflow
+    ports:
+      - "8080:8080"
+    environment:
+      - AIPIPE_HOST=0.0.0.0
+      - AIPIPE_PORT=8080
+      - AIPIPE_START_TUNNEL=${AIPIPE_START_TUNNEL:-0}
+      - JWT_SECRET=${JWT_SECRET:-CHANGE_ME_IN_PRODUCTION}
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - aia-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - aia-network
+
+networks:
+  aia-network:
+    driver: bridge
+
+volumes:
+  aia-data:
